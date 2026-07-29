@@ -1,101 +1,101 @@
-from openai import OpenAI
-from dotenv import load_dotenv
 import os
-
+from groq import Groq
+from dotenv import load_dotenv
 
 load_dotenv()
 
-
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY")
+client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
 )
 
 
 def critique_explanation(agent1_output):
+    """
+    Agent 2:
+    Reviews Agent 1's explanation against the retrieved literature
+    and produces a validated explanation.
+    """
 
     context_text = "\n\n".join(
         agent1_output["retrieved_context"]
     )
 
-
     prompt = f"""
-You are a critical reviewer checking an AI-generated explanation for accuracy.
+You are an expert AI explanation validator.
 
-Draft explanation:
-{agent1_output['draft_explanation']}
+Your task is to critically review an AI-generated explanation.
 
+Student ID:
+{agent1_output["student_id"]}
 
-Source literature it should be grounded in:
+Draft Explanation:
+{agent1_output["draft_explanation"]}
 
+Retrieved Literature:
 {context_text}
 
+Instructions:
 
-Check whether every claim in the draft explanation is actually supported
-by the source literature above.
+1. Check whether every important claim is supported by the literature.
+2. Identify unsupported or exaggerated statements.
+3. If necessary, rewrite the explanation so that it is completely grounded in the literature.
+4. Keep the explanation easy for non-technical users to understand.
 
-Respond in this exact format:
+Respond EXACTLY in this format:
 
 APPROVED: yes/no
 
 ISSUES:
-<list any claims not supported by the literature, or "none">
+- issue 1
+- issue 2
 
 REVISED_EXPLANATION:
-<a corrected version that removes unsupported claims>
+<your corrected explanation>
 """
 
-
     response = client.chat.completions.create(
-
-        model="anthropic/claude-3.5-sonnet",
-
+        model="llama-3.3-70b-versatile",
         messages=[
             {
                 "role": "user",
                 "content": prompt
             }
         ],
-
         temperature=0.2
     )
 
+    output_text = response.choices[0].message.content
 
-    output_text = (
-        response
-        .choices[0]
-        .message
-        .content
-    )
+    # Parse model output safely
+    try:
 
+        approved = (
+            output_text
+            .split("APPROVED:")[1]
+            .split("\n")[0]
+            .strip()
+            .lower() == "yes"
+        )
 
-    # Parse response
-    approved_line = (
-        output_text
-        .split("APPROVED:")[1]
-        .split("\n")[0]
-        .strip()
-        .lower()
-    )
+        issues = (
+            output_text
+            .split("ISSUES:")[1]
+            .split("REVISED_EXPLANATION:")[0]
+            .strip()
+        )
 
+        revised = (
+            output_text
+            .split("REVISED_EXPLANATION:")[1]
+            .strip()
+        )
 
-    approved = approved_line == "yes"
+    except Exception:
 
+        approved = False
+        issues = "Unable to parse model response."
 
-    issues = (
-        output_text
-        .split("ISSUES:")[1]
-        .split("REVISED_EXPLANATION:")[0]
-        .strip()
-    )
-
-
-    revised = (
-        output_text
-        .split("REVISED_EXPLANATION:")[1]
-        .strip()
-    )
-
+        revised = output_text
 
     return {
 
@@ -109,12 +109,9 @@ REVISED_EXPLANATION:
     }
 
 
-
-# Testing Agent 2
 if __name__ == "__main__":
 
     from agents.retriever_agent import retrieve_and_explain
-
 
     sample_risk_flag = {
 
@@ -129,35 +126,25 @@ if __name__ == "__main__":
         ]
     }
 
+    print("\nRunning Agent 1...\n")
 
-    # Agent 1 output
     agent1_result = retrieve_and_explain(
         sample_risk_flag
     )
 
+    print("Running Agent 2...\n")
 
-    # Agent 2 validation
     agent2_result = critique_explanation(
         agent1_result
     )
 
+    print("\n========== AGENT 2 OUTPUT ==========\n")
 
-    print("\n--- Agent 2 (Critic) Output ---\n")
+    print("Student ID :", agent2_result["student_id"])
+    print("Approved  :", agent2_result["approved"])
 
+    print("\nIssues:")
+    print(agent2_result["issues"])
 
-    print(
-        "Approved:",
-        agent2_result["approved"]
-    )
-
-
-    print(
-        "\nIssues:",
-        agent2_result["issues"]
-    )
-
-
-    print(
-        "\nRevised:",
-        agent2_result["revised_explanation"]
-    )
+    print("\nRevised Explanation:\n")
+    print(agent2_result["revised_explanation"])
