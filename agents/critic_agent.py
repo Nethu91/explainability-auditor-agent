@@ -10,11 +10,7 @@ client = Groq(
 
 
 def critique_explanation(agent1_output):
-    """
-    Agent 2:
-    Reviews Agent 1's explanation against the retrieved literature
-    and produces a validated explanation.
-    """
+    """Review Agent 1's draft explanation against the retrieved literature and return an approval/critique verdict."""
 
     context_text = "\n\n".join(
         agent1_output["retrieved_context"]

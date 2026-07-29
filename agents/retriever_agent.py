@@ -13,6 +13,7 @@ client = Groq(
 
 
 def retrieve_and_explain(risk_flag):
+    """Retrieve relevant XAI literature for the given risk flag and generate a draft explanation using Groq."""
 
     # 1. Build RAG query from risk factors
     query = (
