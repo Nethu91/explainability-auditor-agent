@@ -1,0 +1,7 @@
+streamlit
+groq
+openai
+chromadb
+sentence-transformers
+pypdf
+python-dotenv
