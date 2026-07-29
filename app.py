@@ -20,22 +20,27 @@ if submitted:
     factors = [f.strip() for f in factors_input.split(",")]
     risk_flag = {"student_id": student_id, "risk_level": risk_level, "factors": factors}
 
-    with st.spinner("Agent 1: Retrieving literature and drafting explanation..."):
-        agent1_result = retrieve_and_explain(risk_flag)
+    try:
+        with st.spinner("Agent 1: Retrieving literature and drafting explanation..."):
+            agent1_result = retrieve_and_explain(risk_flag)
 
-    st.subheader("📝 Draft Explanation (Agent 1)")
-    st.write(agent1_result["draft_explanation"])
+        st.subheader("📝 Draft Explanation (Agent 1)")
+        st.write(agent1_result["draft_explanation"])
 
-    with st.spinner("Agent 2: Validating against literature..."):
-        agent2_result = critique_explanation(agent1_result)
+        with st.spinner("Agent 2: Validating against literature..."):
+            agent2_result = critique_explanation(agent1_result)
 
-    st.subheader("✅ Validation Result (Agent 2)")
-    st.write("**Approved:**", agent2_result["approved"])
-    st.write("**Issues found:**")
-    st.write(agent2_result["issues"])
-    st.write("**Final Explanation:**")
-    st.write(agent2_result["revised_explanation"])
+        st.subheader("✅ Validation Result (Agent 2)")
+        st.write("**Approved:**", agent2_result["approved"])
+        st.write("**Issues found:**")
+        st.write(agent2_result["issues"])
+        st.write("**Final Explanation:**")
+        st.write(agent2_result["revised_explanation"])
 
-    with st.expander("📚 Retrieved source chunks"):
-        for i, chunk in enumerate(agent1_result["retrieved_context"]):
-            st.text(f"Chunk {i+1}:\n{chunk[:300]}...")
+        with st.expander("📚 Retrieved source chunks"):
+            for i, chunk in enumerate(agent1_result["retrieved_context"]):
+                st.text(f"Chunk {i+1}:\n{chunk[:300]}...")
+
+    except Exception as e:
+        st.error(f"Something went wrong while generating the explanation: {e}")
+        st.info("Please check your API keys and try again.")
