@@ -5,11 +5,32 @@ from sentence_transformers import SentenceTransformer
 import chromadb
 
 
+# ---------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------
+
+CHROMA_PATH = "./chroma_db"
+COLLECTION_NAME = "xai_papers"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+PAPERS_PATH = "data/papers"
+
+
+# Load embedding model once
+model = SentenceTransformer(EMBEDDING_MODEL)
+
+
+# ---------------------------------------------------------
+# PDF TEXT EXTRACTION
+# ---------------------------------------------------------
+
 def extract_text_from_pdf(pdf_path):
     """
-    Extract all text from a PDF file.
+    Extract raw text from every page of a PDF
+    and return it as a single string.
     """
+
     reader = PdfReader(pdf_path)
+
     full_text = ""
 
     for page in reader.pages:
@@ -18,105 +39,160 @@ def extract_text_from_pdf(pdf_path):
         if page_text:
             full_text += page_text + "\n"
 
-    return full_text
+    return full_text.strip()
 
+
+# ---------------------------------------------------------
+# TEXT CHUNKING
+# ---------------------------------------------------------
 
 def chunk_text(text, chunk_size=500, overlap=50):
     """
-    Split text into overlapping chunks.
+    Split text into overlapping word-based chunks
+    to preserve context between chunks.
     """
+
     words = text.split()
+
+    if not words:
+        return []
+
+    if overlap >= chunk_size:
+        raise ValueError(
+            "overlap must be smaller than chunk_size"
+        )
+
     chunks = []
 
     step = chunk_size - overlap
 
-    for i in range(0, len(words), step):
-        chunk = " ".join(words[i:i + chunk_size])
+    for start in range(0, len(words), step):
 
-        if chunk:
-            chunks.append(chunk)
+        chunk_words = words[
+            start:start + chunk_size
+        ]
+
+        if not chunk_words:
+            break
+
+        chunks.append(
+            " ".join(chunk_words)
+        )
+
+        if start + chunk_size >= len(words):
+            break
 
     return chunks
 
 
+# ---------------------------------------------------------
+# VECTOR STORE
+# ---------------------------------------------------------
+
 def build_vector_store():
     """
-    Read PDF papers, create embeddings,
-    and store them in ChromaDB.
+    Extract, chunk, embed and index all PDFs
+    inside data/papers/ into ChromaDB.
     """
 
     client = chromadb.PersistentClient(
-        path="./chroma_db"
+        path=CHROMA_PATH
     )
 
     collection = client.get_or_create_collection(
-        name="xai_papers"
-    )
-
-    model = SentenceTransformer(
-        "all-MiniLM-L6-v2"
+        name=COLLECTION_NAME
     )
 
     pdf_files = glob.glob(
-        "data/papers/*.pdf"
+        os.path.join(PAPERS_PATH, "*.pdf")
     )
 
-    chunk_id = 0
+    if not pdf_files:
+        print("No PDF files found.")
+        return
+
+    total_chunks = 0
 
     for pdf_path in pdf_files:
 
-        print(f"Processing: {pdf_path}")
+        filename = os.path.basename(pdf_path)
+
+        print(f"Processing: {filename}")
 
         text = extract_text_from_pdf(pdf_path)
 
         chunks = chunk_text(text)
 
-        for chunk in chunks:
+        for index, chunk in enumerate(chunks):
+
+            # Unique ID based on PDF + chunk number
+            chunk_id = f"{filename}_{index}"
+
+            # Avoid duplicate insertion
+            existing = collection.get(
+                ids=[chunk_id]
+            )
+
+            if existing["ids"]:
+                continue
 
             embedding = model.encode(
                 chunk
             ).tolist()
 
             collection.add(
-                ids=[str(chunk_id)],
+                ids=[chunk_id],
                 embeddings=[embedding],
                 documents=[chunk],
                 metadatas=[
                     {
-                        "source": os.path.basename(pdf_path)
+                        "source": filename,
+                        "chunk_index": index
                     }
                 ]
             )
 
-            chunk_id += 1
-
+            total_chunks += 1
 
     print(
-        f"Indexed {chunk_id} chunks from {len(pdf_files)} papers."
+        f"Indexed {total_chunks} new chunks "
+        f"from {len(pdf_files)} papers."
     )
 
+
+# ---------------------------------------------------------
+# RETRIEVAL
+# ---------------------------------------------------------
 
 def query_vector_store(query, n_results=5):
     """
-    Search relevant chunks from vector database.
+    Embed a query and return the top-N
+    most relevant chunks from ChromaDB.
     """
 
     client = chromadb.PersistentClient(
-        path="./chroma_db"
+        path=CHROMA_PATH
     )
 
     collection = client.get_or_create_collection(
-        name="xai_papers"
+        name=COLLECTION_NAME
     )
 
-    model = SentenceTransformer(
-        "all-MiniLM-L6-v2"
-    )
+    if collection.count() == 0:
+        return {
+            "documents": [[]],
+            "metadatas": [[]],
+            "distances": [[]]
+        }
 
     query_embedding = model.encode(
         query
     ).tolist()
 
+    n_results = min(
+        n_results,
+        collection.count()
+    )
 
     results = collection.query(
         query_embeddings=[query_embedding],
@@ -126,12 +202,27 @@ def query_vector_store(query, n_results=5):
     return results
 
 
+# ---------------------------------------------------------
+# TESTING
+# ---------------------------------------------------------
 
-# Temporary testing
 if __name__ == "__main__":
 
-    sample_pdf = "data/papers/YOUR_PDF_FILENAME.pdf"
+    build_vector_store()
 
-    text = extract_text_from_pdf(sample_pdf)
+    results = query_vector_store(
+        "What is explainable artificial intelligence?",
+        n_results=5
+    )
 
-    print(text[:500])
+    print("\nRetrieved Documents:\n")
+
+    for i, document in enumerate(
+        results["documents"][0]
+    ):
+
+        source = results["metadatas"][0][i]["source"]
+
+        print(f"\n--- Result {i + 1} ---")
+        print(f"Source: {source}")
+        print(document[:500])
