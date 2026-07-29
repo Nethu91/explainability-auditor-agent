@@ -44,3 +44,9 @@ if submitted:
     except Exception as e:
         st.error(f"Something went wrong while generating the explanation: {e}")
         st.info("Please check your API keys and try again.")
+
+st.divider()
+st.caption(
+    "⚠️ Note: This demo uses simulated risk-flag inputs — "
+    "the underlying financial-risk ML model is not yet integrated."
+)
