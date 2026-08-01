@@ -118,3 +118,8 @@ streamlit run app.py
 - Agent 2's critique parsing relies on the LLM following a fixed output format (`APPROVED:` / `ISSUES:` / `REVISED_EXPLANATION:`); occasional format drift could break parsing — this could be made more robust with structured JSON output in future iterations.
 - Both agents currently use Groq; OpenRouter integration was scoped out due to time constraints, though the architecture supports adding it as a third model source.
 
+## Demo
+
+Live app: https://youtu.be/VCWzfWem3LI?si=o1sQw7-41hxO3CvF 
+
+
